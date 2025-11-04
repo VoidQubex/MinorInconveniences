@@ -21,10 +21,7 @@ public class BlockMixin {
     @Inject(method = "afterBreak", at = @At("HEAD"), cancellable = true)
     private static void afterBreak(World world, PlayerEntity player, BlockPos pos, BlockState state, BlockEntity blockEntity, ItemStack tool, CallbackInfo ci) {
         Random random = new Random();
-
-        double yourUnluckyChance = player.isSneaking() ? 0.4 : 0.8;
-
-        if (random.nextDouble() < yourUnluckyChance) {
+        if (random.nextDouble() < 0.01) {
             ci.cancel();
 
             ItemEntity itemEntity = new ItemEntity(world, pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5, new ItemStack(Items.COAL));

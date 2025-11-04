@@ -9,9 +9,7 @@ public class MinorInconveniences implements ModInitializer {
     public void onInitialize() {
         ServerLoginConnectionEvents.INIT.register((serverLoginNetworkHandler, minecraftServer) -> {
             MICallbacks.registerBlockHitCallback();
-            MICallbacks.registerEntityHitCallback();
             MICallbacks.registerTickEvent();
-            MICallbacks.registerLoginEvent();
         });
     }
 }

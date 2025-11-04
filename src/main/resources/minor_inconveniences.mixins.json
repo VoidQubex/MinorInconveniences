@@ -5,8 +5,7 @@
   "compatibilityLevel": "JAVA_21",
   "mixins": [
     "BlockMixin",
-    "EntityMixin",
-    "HungerManagerMixin"
+    "EntityMixin"
   ],
   "client": [
   ],
