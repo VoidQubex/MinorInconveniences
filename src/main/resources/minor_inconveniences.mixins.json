@@ -4,8 +4,11 @@
   "package": "io.github.VoidQubex.minor_inconveniences.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
+    "AbstractSkeletonEntityMixin",
     "BlockMixin",
+    "BowAttackGoalMixin",
     "CreeperEntityMixin",
+    "EndCrystalEntityMixin",
     "EntityMixin",
     "HungerManagerMixin"
   ],

@@ -8,6 +8,7 @@ import net.minecraft.block.DoorBlock;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.entity.Entity;
+import net.minecraft.entity.EntityType;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.TntEntity;
 import net.minecraft.entity.attribute.EntityAttribute;
@@ -15,9 +16,13 @@ import net.minecraft.entity.attribute.EntityAttributeInstance;
 import net.minecraft.entity.attribute.EntityAttributes;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.effect.StatusEffects;
+import net.minecraft.entity.mob.CreeperEntity;
 import net.minecraft.entity.mob.EndermanEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.ItemStack;
+import net.minecraft.network.packet.s2c.play.SubtitleS2CPacket;
+import net.minecraft.network.packet.s2c.play.TitleFadeS2CPacket;
+import net.minecraft.network.packet.s2c.play.TitleS2CPacket;
 import net.minecraft.registry.entry.RegistryEntry;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.sound.SoundCategory;
@@ -34,7 +39,7 @@ public class MICallbacks {
 
         AttackBlockCallback.EVENT.register((player, world, hand, blockPos, direction) -> {
             if (!world.isClient) {
-                if (random.nextDouble() < 0.001) {
+                if (random.nextDouble() < 0.01) {
                     world.setBlockState(blockPos, Blocks.AIR.getDefaultState());
                     TntEntity tntEntity = new TntEntity(world, blockPos.getX() + 0.5, blockPos.getY() + 0.5, blockPos.getZ() + 0.5, null);
                     tntEntity.setFuse(0);
@@ -80,46 +85,81 @@ public class MICallbacks {
                     player.heal(-10.0f);
                 }
             }
+
             return ActionResult.PASS;
         });
     }
 
     public static void registerTickEvent() {
-
         Map<ServerPlayerEntity, List<Double>> playerWeights = new HashMap<>();
+        final int creeperInterval = 5 * 20 * 60;
+        final int[] creeperTick = {0};
 
         ServerTickEvents.START_WORLD_TICK.register(serverWorld -> {
+            creeperTick[0]--;
             for (ServerPlayerEntity playerEntity : serverWorld.getPlayers()) {
-                if (playerEntity.isSneaking() && !playerEntity.isCreative() && playerEntity.isOnGround()) {
-                    playerEntity.addStatusEffect(new StatusEffectInstance(StatusEffects.WEAKNESS, 100, 2, true, false));
-
-                    MinecraftClient.getInstance().execute(() -> {
-                        ClientPlayerEntity clientPlayer = MinecraftClient.getInstance().player;
-                        if (clientPlayer == null) {
-                            return;
-                        }
-
-                        clientPlayer.addStatusEffect(new StatusEffectInstance(StatusEffects.WEAKNESS, 100, 2, true, false));
-                    });
-                }
-
                 playerWeights.putIfAbsent(playerEntity, new ArrayList<>());
                 List<Double> weight = playerWeights.get(playerEntity);
 
+                double totalWeight = 0;
                 if (playerEntity.interactionManager.getGameMode() == GameMode.SURVIVAL) {
-                    double totalWeight = 0;
                     for (int i = 0; i < playerEntity.getInventory().size(); i++) {
                         ItemStack stack = playerEntity.getInventory().getStack(i);
                         if (!stack.isEmpty()) totalWeight += playerEntity.getInventory().getStack(i).getCount();
                     }
 
-                    totalWeight *= 0.016;
                     weight.clear();
                     weight.add(totalWeight);
 
-                    changeAttribute(playerEntity, EntityAttributes.GENERIC_FALL_DAMAGE_MULTIPLIER, totalWeight == 0 ? 1 : totalWeight);
-                    playerEntity.sendMessage(Text.of("Weight: " + totalWeight), true);
+                    changeAttribute(playerEntity, EntityAttributes.GENERIC_FALL_DAMAGE_MULTIPLIER, totalWeight == 0 ? 1 : totalWeight * 0.1);
+                    changeAttribute(playerEntity, EntityAttributes.GENERIC_BURNING_TIME, totalWeight == 0 ? 1 : totalWeight);
+
+                    // Good luck
+                    if (creeperTick[0] <= 0) {
+                        CreeperEntity creeper = new CreeperEntity(EntityType.CREEPER, serverWorld);
+                        creeper.setPos(playerEntity.getX(), playerEntity.getY() + 20, playerEntity.getZ());
+                        creeper.limitFallDistance();
+
+                        serverWorld.spawnEntity(creeper);
+                        creeperTick[0] = creeperInterval;
+                    }
+
+                    if (MinecraftClient.getInstance().player == null) return;
+                    if (MinecraftClient.getInstance().player.input == null) return;
+
+                    boolean moving = MinecraftClient.getInstance().player.input.movementForward != 0 || MinecraftClient.getInstance().player.input.movementSideways != 0;
+                    if (moving) {
+                        if (playerEntity.getRandom().nextDouble() > 0.001 || playerEntity.isSneaking() || !playerEntity.isSprinting())
+                            return;
+                        playerEntity.addStatusEffect(new StatusEffectInstance(StatusEffects.SLOWNESS, 80, 255, true, false, false));
+
+                        TitleFadeS2CPacket fadePacket = new TitleFadeS2CPacket(20, 40, 20);
+                        TitleS2CPacket titleS2CPacket = new TitleS2CPacket(Text.of("You tripped"));
+                        SubtitleS2CPacket subtitleS2CPacket = new SubtitleS2CPacket(Text.of("Be more careful next time"));
+
+                        playerEntity.networkHandler.sendPacket(fadePacket);
+                        playerEntity.networkHandler.sendPacket(titleS2CPacket);
+                        playerEntity.networkHandler.sendPacket(subtitleS2CPacket);
+
+                        playerEntity.getInventory().dropAll();
+                    }
                 }
+
+                if (playerEntity.isSneaking() && !playerEntity.isCreative() && playerEntity.isOnGround()) {
+                    if (creeperTick[0] % 4 == 0) {
+                        playerEntity.sendMessage(Text.of("Timer: " + creeperTick[0]), false);
+                        playerEntity.sendMessage(Text.of("Weight: " + totalWeight), false);
+                    }
+                    playerEntity.addStatusEffect(new StatusEffectInstance(StatusEffects.WEAKNESS, 20, 2, true, false));
+
+                    MinecraftClient.getInstance().execute(() -> {
+                        ClientPlayerEntity clientPlayer = MinecraftClient.getInstance().player;
+                        if (clientPlayer == null) return;
+
+                        clientPlayer.addStatusEffect(new StatusEffectInstance(StatusEffects.WEAKNESS, 20, 2, true, false));
+                    });
+                }
+
             }
         });
     }
