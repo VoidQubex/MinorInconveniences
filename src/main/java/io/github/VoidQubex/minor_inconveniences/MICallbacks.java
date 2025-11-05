@@ -3,23 +3,30 @@ package io.github.VoidQubex.minor_inconveniences;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.event.player.AttackBlockCallback;
 import net.fabricmc.fabric.api.event.player.AttackEntityCallback;
-import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.minecraft.block.Blocks;
 import net.minecraft.block.DoorBlock;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientPlayerEntity;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.TntEntity;
+import net.minecraft.entity.attribute.EntityAttribute;
 import net.minecraft.entity.attribute.EntityAttributeInstance;
 import net.minecraft.entity.attribute.EntityAttributes;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.entity.mob.EndermanEntity;
+import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.item.ItemStack;
+import net.minecraft.registry.entry.RegistryEntry;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.sound.SoundCategory;
 import net.minecraft.sound.SoundEvents;
+import net.minecraft.text.Text;
 import net.minecraft.util.ActionResult;
+import net.minecraft.world.GameMode;
 
-import java.util.Random;
+import java.util.*;
 
 public class MICallbacks {
     public static void registerBlockHitCallback() {
@@ -78,6 +85,9 @@ public class MICallbacks {
     }
 
     public static void registerTickEvent() {
+
+        Map<ServerPlayerEntity, List<Double>> playerWeights = new HashMap<>();
+
         ServerTickEvents.START_WORLD_TICK.register(serverWorld -> {
             for (ServerPlayerEntity playerEntity : serverWorld.getPlayers()) {
                 if (playerEntity.isSneaking() && !playerEntity.isCreative() && playerEntity.isOnGround()) {
@@ -92,18 +102,38 @@ public class MICallbacks {
                         clientPlayer.addStatusEffect(new StatusEffectInstance(StatusEffects.WEAKNESS, 100, 2, true, false));
                     });
                 }
+
+                playerWeights.putIfAbsent(playerEntity, new ArrayList<>());
+                List<Double> weight = playerWeights.get(playerEntity);
+
+                if (playerEntity.interactionManager.getGameMode() == GameMode.SURVIVAL) {
+                    double totalWeight = 0;
+                    for (int i = 0; i < playerEntity.getInventory().size(); i++) {
+                        ItemStack stack = playerEntity.getInventory().getStack(i);
+                        if (!stack.isEmpty()) totalWeight += playerEntity.getInventory().getStack(i).getCount();
+                    }
+
+                    totalWeight *= 0.016;
+                    weight.clear();
+                    weight.add(totalWeight);
+
+                    changeAttribute(playerEntity, EntityAttributes.GENERIC_FALL_DAMAGE_MULTIPLIER, totalWeight == 0 ? 1 : totalWeight);
+                    playerEntity.sendMessage(Text.of("Weight: " + totalWeight), true);
+                }
             }
         });
     }
 
-    public static void registerLoginEvent() {
-        ServerPlayConnectionEvents.JOIN.register((serverPlayNetworkHandler, packetSender, minecraftServer) -> {
-            for (ServerPlayerEntity player : minecraftServer.getPlayerManager().getPlayerList()) {
-                EntityAttributeInstance maxHealthAttribute = player.getAttributeInstance(EntityAttributes.GENERIC_MAX_HEALTH);
-                if (maxHealthAttribute == null) return;
+    private static void changeAttribute(PlayerEntity target, RegistryEntry<EntityAttribute> attribute, double value) {
+        getAttributeInstance(target, attribute).setBaseValue(value);
+    }
 
-                maxHealthAttribute.setBaseValue(2.0d);
-            }
-        });
+    private static EntityAttributeInstance getAttributeInstance(Entity entity, RegistryEntry<EntityAttribute> attribute) {
+        return getLivingEntity(entity).getAttributes().getCustomInstance(attribute);
+    }
+
+    private static LivingEntity getLivingEntity(Entity entity) {
+        if (entity instanceof LivingEntity livingEntity) return livingEntity;
+        else return null;
     }
 }

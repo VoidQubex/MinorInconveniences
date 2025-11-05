@@ -11,7 +11,6 @@ public class MinorInconveniences implements ModInitializer {
             MICallbacks.registerBlockHitCallback();
             MICallbacks.registerEntityHitCallback();
             MICallbacks.registerTickEvent();
-            MICallbacks.registerLoginEvent();
         });
     }
 }
